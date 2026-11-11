@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>BackupTool, proposte grafiche</title>
+<style>
+  /* ---- The page that holds the proposals ---- */
+  :root {
+    color-scheme: dark;
+    --page: #0d0e11;
+    --page-text: #ecebf0;
+    --page-muted: #9a99a5;
+    --page-line: #26262d;
+    font-family: "Segoe UI Variable Text", "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--page-text); }
+  p, h1, h2, h3, ul { margin: 0; }
+  ul { padding: 0; list-style: none; }
+
+  .intro { max-width: 1240px; margin: 0 auto; padding: 56px 24px 8px; }
+  .intro h1 { font-size: 34px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.15; }
+  .intro p { max-width: 68ch; margin-top: 12px; color: var(--page-muted); }
+
+  .proposal { max-width: 1240px; margin: 0 auto; padding: 56px 24px 0; }
+  .proposal:last-of-type { padding-bottom: 72px; }
+  .proposal-head { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 16px 48px; align-items: end; margin-bottom: 20px; }
+  .proposal-head h2 { font-size: 26px; font-weight: 650; letter-spacing: -0.015em; }
+  .proposal-head .pitch { margin-top: 6px; color: var(--page-muted); max-width: 52ch; }
+  .traits { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 16px; font-size: 14px; }
+  .traits dt { color: var(--page-muted); }
+  .traits dd { margin: 0; }
+
+  .stage { position: relative; padding: 36px 28px 40px; border-radius: 18px; background: var(--wall); overflow: hidden; }
+  .row { display: flex; flex-wrap: wrap; gap: 28px; justify-content: center; align-items: flex-start; }
+  .row + .row { margin-top: 40px; }
+  .shot { display: flex; flex-direction: column; gap: 10px; }
+  .caption { font-size: 12.5px; color: rgb(255 255 255 / 0.62); padding-left: 4px; }
+
+  /* ---- What every proposal shares ---- */
+  .ui {
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+  }
+  .ui[data-state="todo"]    { --state: var(--red); }
+  .ui[data-state="copying"] { --state: var(--amber); }
+  .ui[data-state="safe"]    { --state: var(--green); }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--edge);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    -webkit-backdrop-filter: var(--blur);
+    backdrop-filter: var(--blur);
+  }
+  .muted { color: var(--muted); }
+  .icon { width: 15px; height: 15px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  .hair { height: 1px; background: var(--hair); border: 0; margin: 0; }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    height: 26px; padding: 0 12px;
+    font: inherit; font-size: 12.5px; font-weight: 500; color: var(--text);
+    background: var(--btn); border: 1px solid var(--btn-edge); border-radius: var(--btn-radius);
+    white-space: nowrap;
+  }
+  .btn.primary { color: var(--primary-text); background: var(--primary); border-color: var(--primary-edge); font-weight: 600; }
+  .link { color: var(--link); font-size: 12.5px; }
+
+  .bar { height: 4px; border-radius: 2px; background: var(--track); overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 28%; border-radius: 2px; background: var(--fill); position: relative; overflow: hidden; }
+  .bar i::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.55), transparent);
+    transform: translateX(-100%); animation: sweep 1.8s ease-in-out infinite;
+  }
+  @keyframes sweep { to { transform: translateX(100%); } }
+
+  /* ---- Popover ---- */
+  .pop { width: 348px; padding: 14px 14px 0; }
+  .pop-head { display: flex; gap: 12px; align-items: flex-start; }
+  .pop-name { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 13.5px; }
+  .pop-status { margin-top: 2px; color: var(--muted); font-size: 12.5px; }
+  .pop-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+  .pop-progress { margin-top: 12px; }
+  .pop-progress .line { font-weight: 600; font-size: 12.5px; margin-bottom: 7px; }
+  .pop-progress .note { display: flex; gap: 12px; align-items: center; margin-top: 9px; color: var(--muted); font-size: 11.5px; }
+  .pop-progress .note .btn { margin-left: auto; }
+  .pop-safe { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+  .pop-safe .ok { display: flex; align-items: center; gap: 7px; color: var(--green); font-weight: 600; font-size: 12.5px; }
+  .pop-safe .ok::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); }
+  .pop-safe .btn { margin-left: auto; }
+  .pop-sec { margin: 14px -14px 0; padding: 10px 14px 11px; border-top: 1px solid var(--hair); }
+  .label { color: var(--muted); font-size: 11.5px; margin-bottom: 5px; }
+  .drive { display: flex; align-items: center; gap: 8px; }
+  .drive .muted { margin-left: auto; font-size: 12px; }
+  .pop-foot { display: flex; justify-content: space-between; margin: 0 -14px; padding: 9px 14px 10px; border-top: 1px solid var(--hair); font-size: 12.5px; }
+
+  /* ---- Main window ---- */
+  .win { width: 880px; overflow: hidden; }
+  .win-top { display: flex; align-items: center; gap: 18px; padding: 22px 24px 20px; }
+  .win-title { font-size: 21px; font-weight: 650; letter-spacing: -0.01em; line-height: 1.2; }
+  .win-sub { margin-top: 3px; color: var(--muted); font-size: 13.5px; }
+  .win-top .link { margin-left: auto; align-self: flex-start; }
+  .win-body { display: grid; grid-template-columns: 5fr 7fr; gap: 16px; padding: 0 24px 20px; }
+  .card { padding: 14px 16px; background: var(--inset); border: 1px solid var(--hair); border-radius: calc(var(--radius) - 4px); }
+  .card h3 { font-size: 12px; font-weight: 500; color: var(--muted); margin-bottom: 10px; }
+  .item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 2px 10px; align-items: center; padding: 8px 0; }
+  .item + .item { border-top: 1px solid var(--hair); }
+  .item .icon { grid-row: span 2; width: 18px; height: 18px; color: var(--muted); }
+  .item b { font-weight: 600; font-size: 13.5px; }
+  .item small { grid-column: 2; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chip { grid-row: span 2; font-size: 12px; font-weight: 600; color: var(--state); }
+  .shoot { display: flex; align-items: center; gap: 9px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--hair); font-weight: 600; }
+  .shoot .icon { color: var(--link); }
+  .shoot .link { margin-left: auto; font-weight: 400; }
+  .card .btn { margin-top: 10px; }
+  .win-bar { display: flex; align-items: center; gap: 10px; padding: 12px 24px; border-top: 1px solid var(--hair); background: var(--bar); }
+  .select { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 9px 0 11px; font-size: 12.5px; background: var(--btn); border: 1px solid var(--btn-edge); border-radius: var(--btn-radius); }
+  .select .icon { width: 12px; height: 12px; color: var(--muted); }
+  .toggle { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; margin-left: 6px; }
+  .toggle::before { content: ""; width: 24px; height: 14px; border-radius: 7px; background: radial-gradient(circle at 17px 7px, #fff 0 5px, transparent 5.5px) var(--switch); }
+  .win-bar .btn.primary { margin-left: auto; height: 32px; padding: 0 18px; font-size: 13.5px; }
+
+  /* ================= 1. Lente ================= */
+  [data-theme="lente"] {
+    --wall: radial-gradient(130% 90% at 22% 108%, #6f93c4 0%, #33496b 30%, #171d29 62%, #0d1016 100%);
+    --panel: rgb(27 30 37 / 0.72);
+    --inset: rgb(255 255 255 / 0.04);
+    --bar: rgb(0 0 0 / 0.16);
+    --blur: blur(30px) saturate(150%);
+    --edge: rgb(255 255 255 / 0.1);
+    --hair: rgb(255 255 255 / 0.08);
+    --shadow: 0 24px 60px rgb(0 0 0 / 0.5), inset 0 1px 0 rgb(255 255 255 / 0.06);
+    --radius: 14px;
+    --text: #f2f3f6; --muted: #9ba3b0;
+    --red: #ff5f52; --amber: #f6b93f; --green: #32c873;
+    --btn: rgb(255 255 255 / 0.1); --btn-edge: rgb(255 255 255 / 0.06); --btn-radius: 7px;
+    --primary: #2e7cf6; --primary-edge: #4a8ff8; --primary-text: #fff;
+    --link: #5b9dff; --track: rgb(255 255 255 / 0.12); --fill: #2e7cf6; --switch: #2e7cf6;
+  }
+  /* A lens seen from the front: the colour of its coating is the state. */
+  .lens {
+    position: relative; flex: none; width: var(--size, 42px); aspect-ratio: 1; border-radius: 50%;
+    background:
+      radial-gradient(circle at 33% 26%, rgb(255 255 255 / 0.9) 0 2%, rgb(255 255 255 / 0.22) 6%, transparent 12%),
+      radial-gradient(circle at 67% 74%, rgb(255 255 255 / 0.2) 0 3%, transparent 9%),
+      radial-gradient(circle, #04060a 0 14%, transparent 15.5%),
+      radial-gradient(circle, color-mix(in srgb, var(--state) 60%, #000) 0 17%, var(--state) 26%, color-mix(in srgb, var(--state) 62%, #000) 35%, transparent 36.5%),
+      radial-gradient(circle, #090b10 0 45%, transparent 46.5%),
+      radial-gradient(circle, color-mix(in srgb, var(--state) 28%, #141821) 0 58%, transparent 59.5%),
+      conic-gradient(from 140deg, #626a79, #1a1d24, #747c8b, #13161c, #626a79);
+    box-shadow: 0 0 0 1px rgb(255 255 255 / 0.14), 0 6px 14px rgb(0 0 0 / 0.55),
+      0 0 26px color-mix(in srgb, var(--state) 38%, transparent);
+  }
+  .lens::after {
+    content: ""; position: absolute; inset: 0; border-radius: 50%;
+    background: conic-gradient(from 210deg, transparent 0 62%, rgb(255 255 255 / 0.22) 72%, transparent 84%);
+    mix-blend-mode: screen;
+  }
+  [data-state="copying"] .lens::after { animation: turn 3.2s linear infinite; }
+  @keyframes turn { to { transform: rotate(360deg); } }
+
+  /* ================= 2. Anello ================= */
+  [data-theme="anello"] {
+    --wall: linear-gradient(155deg, #34363b 0%, #1f2023 45%, #121315 100%);
+    --panel: #1b1c1f;
+    --inset: #222327;
+    --bar: #17181a;
+    --blur: none;
+    --edge: rgb(255 255 255 / 0.08);
+    --hair: rgb(255 255 255 / 0.07);
+    --shadow: 0 22px 50px rgb(0 0 0 / 0.55), inset 0 1px 0 rgb(255 255 255 / 0.07);
+    --radius: 12px;
+    --text: #f4f3f0; --muted: #9c9a94;
+    --red: #f2543f; --amber: #f0b23a; --green: #40cf7c;
+    --btn: #2a2b2f; --btn-edge: rgb(255 255 255 / 0.08); --btn-radius: 8px;
+    --primary: #f4f3f0; --primary-edge: #f4f3f0; --primary-text: #17181a;
+    --link: #f4f3f0; --track: rgb(255 255 255 / 0.1); --fill: var(--state); --switch: #5a5b60;
+  }
+  [data-theme="anello"] .link { text-decoration: underline; text-decoration-color: rgb(255 255 255 / 0.3); text-underline-offset: 3px; }
+  /* A gauge: how much of the card is safe, drawn as how much of the ring is closed. */
+  .ring { position: relative; flex: none; width: var(--size, 50px); aspect-ratio: 1; }
+  .ring > svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .ring circle { fill: none; stroke-width: 3.5; }
+  .ring .rail { stroke: rgb(255 255 255 / 0.1); }
+  .ring .arc { stroke: var(--state); stroke-linecap: round; stroke-dasharray: var(--done, 0) 100; filter: drop-shadow(0 0 4px color-mix(in srgb, var(--state) 60%, transparent)); }
+  [data-state="todo"] .ring .rail { stroke: color-mix(in srgb, var(--red) 55%, transparent); stroke-dasharray: 1.5 3; }
+  .ring span { position: absolute; inset: 0; display: grid; place-items: center; font-weight: 650; font-size: calc(var(--size, 50px) * 0.3); letter-spacing: -0.02em; }
+  .ring .icon { width: 42%; height: 42%; stroke: var(--green); stroke-width: 2.2; }
+  [data-state="copying"] .ring .arc { animation: breathe 2.4s ease-in-out infinite; }
+  @keyframes breathe { 50% { opacity: 0.6; } }
+
+  /* ================= 3. Tally ================= */
+  [data-theme="tally"] {
+    --wall: radial-gradient(110% 90% at 85% -10%, #3a3358 0%, #1d1a2c 40%, #0f0e16 100%);
+    --panel: rgb(20 19 26 / 0.78);
+    --inset: rgb(255 255 255 / 0.035);
+    --bar: rgb(0 0 0 / 0.2);
+    --blur: blur(30px) saturate(140%);
+    --edge: rgb(255 255 255 / 0.09);
+    --hair: rgb(255 255 255 / 0.07);
+    --shadow: 0 24px 60px rgb(0 0 0 / 0.55);
+    --radius: 16px;
+    --text: #f6f5f9; --muted: #a39fb0;
+    --red: #ff5b4d; --amber: #ffbe45; --green: #3ddc84;
+    --btn: rgb(255 255 255 / 0.07); --btn-edge: rgb(255 255 255 / 0.1); --btn-radius: 999px;
+    --primary: rgb(255 255 255 / 0.92); --primary-edge: transparent; --primary-text: #14131a;
+    --link: var(--text); --track: rgb(255 255 255 / 0.1); --fill: var(--state); --switch: #6a6680;
+  }
+  [data-theme="tally"] .link { opacity: 0.8; }
+  /* The state is a light: it glows from the corner into the glass, like the
+     tally lamp on a camera. */
+  [data-theme="tally"] .panel { position: relative; }
+  [data-theme="tally"] .panel::before {
+    content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+    background:
+      radial-gradient(70% 55% at 0% 0%, color-mix(in srgb, var(--state) 30%, transparent), transparent 70%),
+      linear-gradient(90deg, color-mix(in srgb, var(--state) 90%, transparent), transparent 55%) top / 100% 1px no-repeat;
+  }
+  [data-theme="tally"] .panel > * { position: relative; }
+  .lamp { flex: none; width: var(--size, 11px); aspect-ratio: 1; margin-top: 5px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff, var(--state) 45%); box-shadow: 0 0 0 3px color-mix(in srgb, var(--state) 22%, transparent), 0 0 16px 2px var(--state); }
+  [data-state="copying"] .lamp { animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--state) 14%, transparent), 0 0 26px 5px var(--state); } }
+  [data-theme="tally"] .pop { padding-top: 16px; }
+  [data-theme="tally"] .pop-title { font-size: 17px; font-weight: 650; letter-spacing: -0.01em; line-height: 1.2; }
+  [data-theme="tally"] .pop-name { font-size: 12px; font-weight: 500; color: var(--muted); margin-bottom: 2px; }
+  [data-theme="tally"] .pop-status { margin-top: 4px; }
+  [data-theme="tally"] .pop-actions { justify-content: flex-start; padding-left: 23px; }
+  [data-theme="tally"] .pop-progress, [data-theme="tally"] .pop-safe { padding-left: 23px; }
+  [data-theme="tally"] .pop-safe .ok { display: none; }
+  [data-theme="tally"] .pop-safe .btn { margin-left: 0; }
+  [data-theme="tally"] .bar i { box-shadow: 0 0 10px var(--state); }
+  [data-theme="tally"] .win-top { align-items: flex-start; }
+  [data-theme="tally"] .win-top .lamp { --size: 15px; margin-top: 7px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .bar i::after, .lens::after, .ring .arc, .lamp { animation: none !important; }
+  }
+  @media (max-width: 820px) {
+    .proposal-head { grid-template-columns: 1fr; }
+    .stage { padding: 24px 12px; overflow-x: auto; }
+    .row { flex-wrap: nowrap; justify-content: flex-start; }
+  }
+</style>
+</head>
+<body>
+<header class="intro">
+  <h1>Tre modi di vestire la stessa app</h1>
+  <p>Tutte e tre sono scure e vicine al video: un pannello morbido, testi piccoli e precisi, un solo elemento che dice a colpo d'occhio se la scheda è al sicuro. Cambia come lo dice. Ogni proposta mostra il popover nei tre momenti che contano e la finestra principale.</p>
+</header>
+<main id="board"></main>
+
+<script>
+const icon = {
+  card: '<svg class="icon" viewBox="0 0 16 16"><path d="M4.5 1.5h5l3 3v9a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1z"/><path d="M6 4v2M8 4v2M10 5v1"/></svg>',
+  drive: '<svg class="icon" viewBox="0 0 16 16"><rect x="1.5" y="4" width="13" height="8" rx="2"/><path d="M4 9.5h.01M6.5 9.5h3"/></svg>',
+  folder: '<svg class="icon" viewBox="0 0 16 16"><path d="M1.5 4.5a1 1 0 0 1 1-1h3l1.5 1.5h6.5a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1z"/></svg>',
+  check: '<svg class="icon" viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7"/></svg>',
+  down: '<svg class="icon" viewBox="0 0 16 16"><path d="M4 6l4 4 4-4"/></svg>',
+  eject: '<svg class="icon" viewBox="0 0 16 16"><path d="M8 3l5 6H3z"/><path d="M3.5 12.5h9"/></svg>',
+};
+
+/* How each proposal shows the state. `big` is the main-window size. */
+const indicator = {
+  lente: (state, big) => `<div class="lens" style="--size:${big ? 58 : 42}px"></div>`,
+  anello: (state, big) => {
+    const done = { todo: 0, copying: 28, safe: 100 }[state];
+    const inside = `<span>${state === 'todo' ? 131 : 94}</span>`;
+    return `<div class="ring" style="--size:${big ? 64 : 50}px;--done:${done}">
+      <svg viewBox="0 0 36 36"><circle class="rail" cx="18" cy="18" r="15.9"/><circle class="arc" cx="18" cy="18" r="15.9" pathLength="100"/></svg>
+      ${state === 'safe' ? `<span>${icon.check}</span>` : inside}</div>`;
+  },
+  tally: () => `<div class="lamp"></div>`,
+};
+
+const copy = {
+  todo: { title: 'Non formattare', status: '131 file su 131 non sono ancora su T7 Shield.' },
+  copying: { title: 'Copia in corso', status: '94 file su 131 non sono ancora su T7 Shield.' },
+  safe: { title: 'Puoi formattare', status: 'Tutti i 131 file sono verificati su T7 Shield.' },
+};
+
+function popover(theme, state) {
+  const c = copy[state];
+  // "Tally" leads with the verdict in large type; the others with the card.
+  const text = theme === 'tally'
+    ? `<p class="pop-name">${icon.card} NIKON Z6_3</p><p class="pop-title">${c.title}</p><p class="pop-status">${c.status}</p>`
+    : `<p class="pop-name">${icon.card} NIKON Z6_3</p><p class="pop-status">${c.status}${state === 'safe' ? '' : ' Non formattare.'}</p>`;
+  const body = {
+    todo: `<div class="pop-actions"><span class="btn">Scegli cartella…</span><span class="btn primary">Nuovo shoot…</span></div>`,
+    copying: `<div class="pop-progress"><p class="line">Copia del file 37 di 131, 48,6 GB di 172,4 GB</p><div class="bar"><i></i></div>
+      <p class="note"><span>Ogni file viene riletto e confrontato con la scheda. Puoi chiudere: la copia continua.</span><span class="btn">Ferma</span></p></div>`,
+    safe: `<div class="pop-safe"><span class="ok">Puoi formattare</span><span class="btn primary">${icon.eject} Espelli</span><span class="link">Apri il report</span></div>`,
+  }[state];
+  return `<div class="ui panel pop" data-state="${state}">
+    <div class="pop-head">${indicator[theme](state, false)}<div>${text}</div></div>
+    ${body}
+    <div class="pop-sec"><p class="label">Collegati</p><div class="drive">${icon.drive}<span>T7 Shield</span><span class="muted">Disco di lavoro</span></div></div>
+    <div class="pop-foot"><span class="link">Apri BackupTool</span><span class="muted">Esci</span></div>
+  </div>`;
+}
+
+function mainWindow(theme) {
+  return `<div class="ui panel win" data-state="todo">
+    <div class="win-top">${indicator[theme]('todo', true)}
+      <div><p class="win-title">Non formattare</p><p class="win-sub">131 file su 131 non sono ancora su T7 Shield.</p></div>
+      <span class="link">Vista compatta</span></div>
+    <div class="win-body">
+      <div class="card"><h3>Scheda</h3>
+        <div class="item">${icon.card}<b>NIKON Z6_3</b><small>131 file, 172,4 GB</small></div>
+        <div class="item">${icon.check}<b>Nikon Z6 III</b><small>Seriale …0419, girato l'8 novembre</small></div>
+        <span class="btn">${icon.eject} Espelli la scheda</span>
+      </div>
+      <div class="card"><h3>Destinazioni</h3>
+        <div class="item">${icon.drive}<b>T7 Shield</b><span class="chip">mancano 131 file</span><small>F:\\2026\\Client work</small></div>
+        <div class="item">${icon.drive}<b>Backup RAID</b><span class="chip">mancano 131 file</span><small>G:\\Archivio\\2026</small></div>
+        <div class="shoot">${icon.folder}<span>Kestrel Running › 08.11.26 Trail series</span><span class="link">Modifica</span></div>
+      </div>
+    </div>
+    <div class="win-bar">
+      <span class="select">xxHash64 ${icon.down}</span><span class="select">Rileggi ogni copia ${icon.down}</span>
+      <span class="toggle">MHL</span><span class="toggle">Report</span><span class="toggle">Notifiche</span>
+      <span class="btn primary">Copia e verifica</span>
+    </div>
+  </div>`;
+}
+
+const proposals = [
+  { id: 'lente', name: '1. Lente',
+    pitch: 'La più vicina al video. Vetro scuro traslucido sopra la scrivania e un obiettivo visto di fronte: il colore del suo trattamento è lo stato della scheda.',
+    traits: [['Indicatore', 'Una lente che passa da rossa ad ambra a verde, con un riflesso che gira durante la copia.'],
+             ['Materiale', 'Vetro traslucido con sfocatura dello sfondo.'],
+             ['Accento', 'Blu di sistema per l\'azione principale e i collegamenti.']] },
+  { id: 'anello', name: '2. Anello',
+    pitch: 'Più strumento. Grafite piena e opaca, e un anello che è anche una misura: quanto della scheda è al sicuro si legge da quanto è chiuso.',
+    traits: [['Indicatore', 'Anello tratteggiato rosso, poi un arco che cresce con la copia, poi chiuso e verde. Al centro i file che mancano.'],
+             ['Materiale', 'Superfici opache: identiche su Windows e Mac, leggibili anche in piena luce.'],
+             ['Accento', 'Nessun colore oltre a quelli di stato: il pulsante principale è chiaro.']] },
+  { id: 'tally', name: '3. Tally',
+    pitch: 'La più d\'atmosfera. Lo stato è una luce, come la spia rossa di una camera che registra: parte da un angolo e si diffonde nel vetro.',
+    traits: [['Indicatore', 'Una spia e un alone del suo colore nel pannello. Il verdetto è scritto in grande.'],
+             ['Materiale', 'Vetro scuro traslucido, bordi più morbidi, pulsanti a pillola.'],
+             ['Accento', 'Solo la luce di stato: pulsanti e collegamenti restano neutri.']] },
+];
+
+document.getElementById('board').innerHTML = proposals.map((p) => `
+  <section class="proposal" data-theme="${p.id}">
+    <div class="proposal-head">
+      <div><h2>${p.name}</h2><p class="pitch">${p.pitch}</p></div>
+      <dl class="traits">${p.traits.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>
+    </div>
+    <div class="stage">
+      <div class="row">
+        <div class="shot"><p class="caption">Scheda inserita</p>${popover(p.id, 'todo')}</div>
+        <div class="shot"><p class="caption">Durante la copia</p>${popover(p.id, 'copying')}</div>
+        <div class="shot"><p class="caption">Copia verificata</p>${popover(p.id, 'safe')}</div>
+      </div>
+      <div class="row"><div class="shot"><p class="caption">Finestra principale</p>${mainWindow(p.id)}</div></div>
+    </div>
+  </section>`).join('');
+</script>
+</body>
+</html>

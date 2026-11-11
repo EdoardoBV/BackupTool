@@ -1,0 +1,66 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "BackupTool",
+  "version": "0.1.0",
+  "identifier": "it.buonavisione.backuptool",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "BackupTool",
+        "width": 980,
+        "height": 700,
+        "minWidth": 760,
+        "minHeight": 560,
+        "label": "main",
+        "theme": "Dark",
+        "backgroundColor": "#0e1116"
+      },
+      {
+        "label": "popover",
+        "url": "index.html?view=popover",
+        "title": "BackupTool",
+        "width": 380,
+        "height": 200,
+        "visible": false,
+        "decorations": false,
+        "resizable": false,
+        "skipTaskbar": true,
+        "alwaysOnTop": true,
+        "theme": "Dark",
+        "transparent": true,
+        "shadow": true,
+        "windowEffects": {
+          "effects": [
+            "acrylic"
+          ],
+          "color": [
+            24,
+            27,
+            34,
+            170
+          ]
+        }
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}

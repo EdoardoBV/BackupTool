@@ -1,0 +1,13 @@
+[package]
+name = "backup-cli"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "bt"
+path = "src/main.rs"
+
+[dependencies]
+backup-engine = { path = "../engine" }
+clap = { version = "4", features = ["derive"] }
+ctrlc = "3"

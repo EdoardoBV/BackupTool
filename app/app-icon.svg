@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <rect x="64" y="64" width="896" height="896" rx="200" fill="#24282c"/>
+  <!-- a memory card with a strip of green tape across it: "safe" -->
+  <path d="M352 256h248l88 88v424H352z" fill="#eceae4"/>
+  <g fill="#24282c">
+    <rect x="400" y="296" width="36" height="88" rx="8"/>
+    <rect x="456" y="296" width="36" height="88" rx="8"/>
+    <rect x="512" y="296" width="36" height="88" rx="8"/>
+  </g>
+  <rect x="232" y="520" width="560" height="132" fill="#3aa863" transform="rotate(-8 512 586)"/>
+</svg>
