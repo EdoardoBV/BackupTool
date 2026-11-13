@@ -1,0 +1,52 @@
+name: Build for macOS
+
+# Started by hand (Actions tab, or `gh workflow run build-macos.yml`) and by
+# version tags. Not on every push: in a private repository macOS minutes are
+# billed at ten times the Linux rate.
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+concurrency:
+  group: build-macos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+
+      # The engine has macOS-only code (reads that skip the page cache) that
+      # no other machine compiles or runs: prove it here before packaging.
+      - name: Test the engine on macOS
+        run: cargo test -p backup-engine
+
+      - name: Install interface dependencies
+        working-directory: app
+        run: npm ci
+
+      # One app for both Apple Silicon and Intel Macs.
+      - name: Build the app
+        working-directory: app
+        run: npm run tauri build -- --target universal-apple-darwin
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BackupTool-macOS
+          path: target/universal-apple-darwin/release/bundle/dmg/*.dmg
+          if-no-files-found: error
