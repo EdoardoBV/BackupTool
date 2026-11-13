@@ -1,12 +1,10 @@
 name: Build for macOS
 
-# Started by hand (Actions tab, or `gh workflow run build-macos.yml`) and by
-# version tags. Not on every push: in a private repository macOS minutes are
-# billed at ten times the Linux rate.
+# Started by hand only (Actions tab, or `gh workflow run build-macos.yml`),
+# never by a push or a tag: in a private repository macOS minutes are billed
+# at ten times the Linux rate, and a build takes about six.
 on:
   workflow_dispatch:
-  push:
-    tags: ["v*"]
 
 concurrency:
   group: build-macos-${{ github.ref }}
