@@ -45,12 +45,15 @@ pub struct Volume {
     pub(crate) removable: bool,
     /// Holds the folders a camera writes.
     pub(crate) card: bool,
+    /// A share on another machine, mapped as a drive. Its sizes are not known.
+    pub(crate) network: bool,
     pub(crate) total: u64,
     pub(crate) available: u64,
 }
 
 pub(crate) fn volumes() -> Vec<Volume> {
-    sysinfo::Disks::new_with_refreshed_list()
+    // The disk list leaves out everything that is not attached to this machine.
+    let mut found: Vec<Volume> = sysinfo::Disks::new_with_refreshed_list()
         .iter()
         .map(|disk| Volume {
             path: disk.mount_point().to_string_lossy().into_owned(),
@@ -58,10 +61,63 @@ pub(crate) fn volumes() -> Vec<Volume> {
             file_system: disk.file_system().to_string_lossy().into_owned(),
             removable: disk.is_removable(),
             card: looks_like_card(disk.mount_point()),
+            network: false,
             total: disk.total_space(),
             available: disk.available_space(),
         })
+        .collect();
+    found.extend(network_volumes());
+    found
+}
+
+/// Shares mapped to a drive letter, named by where they point (`\\nas\video`).
+///
+/// Nothing here may wait on the network: this runs every couple of seconds,
+/// and a NAS that is switched off would hold up noticing a card. So there are
+/// no sizes, and no look inside for camera folders: a share is never a card.
+#[cfg(windows)]
+fn network_volumes() -> Vec<Volume> {
+    use windows_sys::Win32::NetworkManagement::WNet::WNetGetConnectionW;
+    use windows_sys::Win32::Storage::FileSystem::{GetDriveTypeW, GetLogicalDrives};
+    use windows_sys::Win32::System::WindowsProgramming::DRIVE_REMOTE;
+
+    let wide = |text: String| -> Vec<u16> { text.encode_utf16().chain([0]).collect() };
+    // SAFETY: takes no arguments and returns a bit per drive letter.
+    let letters = unsafe { GetLogicalDrives() };
+    ('A'..='Z')
+        .enumerate()
+        .filter(|(bit, _)| letters & (1 << bit) != 0)
+        .filter_map(|(_, letter)| {
+            let root = wide(format!("{letter}:\\"));
+            // SAFETY: `root` is a NUL-terminated UTF-16 string that outlives the call.
+            if unsafe { GetDriveTypeW(root.as_ptr()) } != DRIVE_REMOTE {
+                return None;
+            }
+            let local = wide(format!("{letter}:"));
+            let mut remote = [0u16; 1024];
+            let mut len = remote.len() as u32;
+            // SAFETY: `local` is NUL-terminated; `remote` has room for `len`
+            // characters, and both outlive the call.
+            let known = unsafe { WNetGetConnectionW(local.as_ptr(), remote.as_mut_ptr(), &mut len) } == 0;
+            let end = remote.iter().position(|&unit| unit == 0).unwrap_or(0);
+            Some(Volume {
+                path: format!("{letter}:\\"),
+                name: if known { String::from_utf16_lossy(&remote[..end]) } else { String::new() },
+                file_system: String::new(),
+                removable: false,
+                card: false,
+                network: true,
+                total: 0,
+                available: 0,
+            })
+        })
         .collect()
+}
+
+/// Only Windows shares are listed so far; elsewhere a share is picked as a folder.
+#[cfg(not(windows))]
+fn network_volumes() -> Vec<Volume> {
+    Vec::new()
 }
 
 #[tauri::command(async)]
@@ -351,9 +407,23 @@ mod tests {
             file_system: "exFAT".into(),
             removable: true,
             card,
+            network: false,
             total: 0,
             available: 0,
         }
+    }
+
+    /// The real system call path: whatever shares this machine has mapped,
+    /// none is a card or ejectable, and no local disk is taken for one.
+    #[test]
+    #[cfg(windows)]
+    fn local_disks_are_not_listed_as_network_shares() {
+        let system = std::env::var("SystemDrive").unwrap_or_else(|_| "C:".into());
+        for share in network_volumes() {
+            assert!(share.network && !share.card && !share.removable, "{}", share.path);
+            assert!(!share.path.eq_ignore_ascii_case(&format!("{system}\\")));
+        }
+        assert!(volumes().iter().any(|volume| !volume.network));
     }
 
     #[test]

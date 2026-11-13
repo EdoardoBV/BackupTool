@@ -12,6 +12,7 @@ import {
   EjectIcon,
   FolderIcon,
   Lens,
+  NetworkIcon,
   PlusIcon,
 } from "./ui";
 
@@ -106,7 +107,7 @@ export default function App() {
     if (intent?.kind === "new-shoot") setChoosingShoot(true);
   }, [intent]);
 
-  const sources = volumes.filter((volume) => volume.removable || volume.card);
+  const sources = volumes.filter((volume) => volume.removable || volume.card || volume.network);
   const sourceIsFolder = source !== null && !sources.some((volume) => volume.path === source);
   const camera = card?.camera;
 
@@ -140,11 +141,12 @@ export default function App() {
                   disabled={running}
                   onClick={() => chooseSource(volume.path)}
                 >
-                  {volume.card ? <CardIcon /> : <DriveIcon />}
+                  {volume.card ? <CardIcon /> : volume.network ? <NetworkIcon /> : <DriveIcon />}
                   <b>{volume.name || volume.path}</b>
                   <small>
-                    {volume.path} {bytes(volume.total - volume.available)} usati di{" "}
-                    {bytes(volume.total)}
+                    {volume.network
+                      ? `${volume.path} Unità di rete`
+                      : `${volume.path} ${bytes(volume.total - volume.available)} usati di ${bytes(volume.total)}`}
                   </small>
                 </button>
               </li>

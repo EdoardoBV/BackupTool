@@ -150,6 +150,7 @@ mod tests {
             file_system: "exFAT".into(),
             removable,
             card: removable,
+            network: false,
             total: 0,
             available: 0,
         }

@@ -24,7 +24,14 @@ export const DriveIcon = () => (
   </Icon>
 );
 
-export const FolderIcon = ({ className }: { className?: string }) => (
+export const NetworkIcon = () => (
+  <Icon>
+    <rect x="2.5" y="2" width="11" height="6.5" rx="1.5" />
+    <path d="M5 5.25h.01M8 8.5v3.5M2.5 12.5h11" />
+  </Icon>
+);
+
+export const FolderIcon =({ className }: { className?: string }) => (
   <Icon className={className}>
     <path d="M1.5 4.5a1 1 0 0 1 1-1h3l1.5 1.5h6.5a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1z" />
   </Icon>

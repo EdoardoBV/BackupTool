@@ -9,6 +9,8 @@ export type Volume = {
   removable: boolean;
   /** Holds the folders a camera writes. */
   card: boolean;
+  /** A share on another machine, named by where it points; its sizes are not known. */
+  network: boolean;
   total: number;
   available: number;
 };
@@ -344,9 +346,10 @@ function demo(): Api {
     cameraNames: async () => ({ "6020419": "Z6 III" }),
     rememberCamera: async () => {},
     listVolumes: async () => [
-      { path: "E:\\", name: "NIKON Z6_3", file_system: "exFAT", removable: true, card: true, total: 256e9, available: 83.6e9 },
-      { path: "F:\\", name: "T7 Shield", file_system: "exFAT", removable: true, card: false, total: 2e12, available: 1.31e12 },
-      { path: "C:\\", name: "Windows", file_system: "NTFS", removable: false, card: false, total: 1e12, available: 52e9 },
+      { path: "E:\\", name: "NIKON Z6_3", file_system: "exFAT", removable: true, card: true, network: false, total: 256e9, available: 83.6e9 },
+      { path: "F:\\", name: "T7 Shield", file_system: "exFAT", removable: true, card: false, network: false, total: 2e12, available: 1.31e12 },
+      { path: "C:\\", name: "Windows", file_system: "NTFS", removable: false, card: false, network: false, total: 1e12, available: 52e9 },
+      { path: "Z:\\", name: "\\\\NAS\\Footage", file_system: "", removable: false, card: false, network: true, total: 0, available: 0 },
     ],
     inspect: async (_source, destinations) => ({
       files: total,
