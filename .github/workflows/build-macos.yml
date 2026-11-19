@@ -2,10 +2,14 @@ name: Build for macOS
 
 # Started by hand only (Actions tab, or `gh workflow run build-macos.yml`),
 # never by a push or a tag: in a private repository macOS minutes are billed
-# at ten times the Linux rate, and a build takes about eight, plus a few for
-# Apple's notarization when the app is signed.
+# at ten times the Linux rate, and a build takes about nine, plus the wait
+# for Apple's notarization when the app is signed.
 on:
   workflow_dispatch:
+    inputs:
+      apple_wait:
+        description: Minutes to wait for Apple's answer on the notarization (0 = do not wait)
+        default: "10"
 
 concurrency:
   group: build-macos-${{ github.ref }}
@@ -72,11 +76,13 @@ jobs:
             echo "::warning::No 'Developer ID Application' identity was seen in the certificate. Any other kind (Apple Development, Apple Distribution, Mac Installer) cannot sign an app for use outside the App Store."
           fi
 
-          if ! xcrun notarytool history --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" > /dev/null; then
+          # The list also shows how Apple is getting on with earlier builds.
+          if ! xcrun notarytool history --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" > "$RUNNER_TEMP/history.txt"; then
             echo "::error::Apple refused the notarization login: check APPLE_ID, APPLE_PASSWORD (an app-specific password, not the account's own) and APPLE_TEAM_ID."
             exit 1
           fi
-          echo "Apple accepts the notarization login."
+          echo "Apple accepts the notarization login. Latest submissions:"
+          head -30 "$RUNNER_TEMP/history.txt"
 
       - uses: actions/checkout@v4
 
@@ -112,20 +118,19 @@ jobs:
         run: npm ci
 
       # One app for both Apple Silicon and Intel Macs. Tauri imports the
-      # certificate into a keychain of its own, signs the app and the FFmpeg
-      # inside it, sends the app to Apple and staples the answer to it.
-      # APPLE_SIGNING_IDENTITY overrides the ad-hoc "-" of tauri.conf.json and
-      # only has to be part of the certificate's name.
-      - name: Build the app, signed and notarized
+      # certificate into a keychain of its own and signs the app, the FFmpeg
+      # inside it and the .dmg. APPLE_SIGNING_IDENTITY overrides the ad-hoc
+      # "-" of tauri.conf.json and only has to be part of the certificate's
+      # name. Tauri is not given the Apple login: it would notarize too, but
+      # it waits for Apple with no limit, and Apple can take hours (the first
+      # signed build sat there until the job was killed, and its app was lost).
+      - name: Build the app, signed with the Developer ID
         if: env.SIGNED == 'true'
         working-directory: app
         env:
           APPLE_SIGNING_IDENTITY: Developer ID Application
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: npm run tauri build -- --target universal-apple-darwin
 
       - name: Build the app, signed ad hoc
@@ -152,13 +157,73 @@ jobs:
           # The Intel half only runs here if the machine has Rosetta.
           arch -x86_64 "$ffmpeg" -version | head -1 || echo "::warning::The Intel FFmpeg was not run (no Rosetta here?)"
 
-      # What a Mac that downloaded the app will decide: Gatekeeper has to
-      # accept it as a notarized Developer ID app, with the ticket stapled so
-      # it also opens with no network.
-      - name: Check that a Mac will open it
+      # The .dmg uploaded above is already the one to give out: Apple's answer
+      # is about that very file, so once Apple accepts it, it opens on any Mac
+      # that is online, whether or not this job was still waiting.
+      - name: Send the .dmg to Apple for notarization
+        id: notarize
         if: env.SIGNED == 'true'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_WAIT: ${{ inputs.apple_wait }}
         run: |
           app="$(ls -d target/universal-apple-darwin/release/bundle/macos/*.app)"
+          dmg="$(ls target/universal-apple-darwin/release/bundle/dmg/*.dmg)"
+          login=(--apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID")
+
+          # Apple refuses anything not signed by a Developer ID with the
+          # hardened runtime: find that out here rather than after the upload.
           codesign --display --verbose=2 "$app" 2>&1 | grep -E "^(Authority|TeamIdentifier|Timestamp)"
-          xcrun stapler validate "$app"
+          codesign --display --verbose=2 "$app/Contents/MacOS/ffmpeg" 2>&1 | grep -E "flags=.*runtime"
+          codesign --verify --verbose=2 "$dmg"
+
+          xcrun notarytool submit "$dmg" "${login[@]}" --output-format json > "$RUNNER_TEMP/submit.json"
+          id="$(jq -r .id "$RUNNER_TEMP/submit.json")"
+          echo "Submission $id"
+          echo "submission=$id" >> "$GITHUB_OUTPUT"
+
+          if [ "${APPLE_WAIT:-0}" != "0" ]; then
+            xcrun notarytool wait "$id" "${login[@]}" --timeout "${APPLE_WAIT}m" || true
+          fi
+          status="$(xcrun notarytool info "$id" "${login[@]}" --output-format json | jq -r .status)"
+          echo "Apple says: $status"
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+
+          case "$status" in
+            Accepted) ;;
+            "In Progress")
+              echo "::warning::Apple has not answered yet (submission $id). The .dmg of this run is signed and will open normally once Apple accepts it. Run 'Finish the macOS notarization' with run id $GITHUB_RUN_ID to check, and to staple it."
+              {
+                echo "### Notarization still in progress"
+                echo "Submission $id. Run **Finish the macOS notarization** with run id **$GITHUB_RUN_ID** to see whether Apple has answered and to staple the .dmg."
+              } >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            *)
+              echo "::error::Apple did not accept the app ($status). Its reasons follow."
+              xcrun notarytool log "$id" "${login[@]}" || true
+              exit 1
+              ;;
+          esac
+
+      # With Apple's answer stapled to it the .dmg also opens on a Mac with no
+      # network. Then ask Gatekeeper what a Mac that downloaded it will decide.
+      - name: Staple Apple's answer and check that a Mac will open it
+        if: steps.notarize.outputs.status == 'Accepted'
+        run: |
+          app="$(ls -d target/universal-apple-darwin/release/bundle/macos/*.app)"
+          dmg="$(ls target/universal-apple-darwin/release/bundle/dmg/*.dmg)"
+          xcrun stapler staple "$dmg"
+          xcrun stapler validate "$dmg"
+          spctl --assess --type open --context context:primary-signature --verbose=2 "$dmg"
           spctl --assess --type execute --verbose=2 "$app"
+
+      - name: Replace the uploaded .dmg with the stapled one
+        if: steps.notarize.outputs.status == 'Accepted'
+        uses: actions/upload-artifact@v4
+        with:
+          name: BackupTool-macOS
+          path: target/universal-apple-darwin/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+          overwrite: true

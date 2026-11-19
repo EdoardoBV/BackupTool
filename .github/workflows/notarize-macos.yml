@@ -1,0 +1,58 @@
+name: Finish the macOS notarization
+
+# For a "Build for macOS" run that ended while Apple was still looking at its
+# .dmg. That .dmg is signed and opens normally as soon as Apple accepts it;
+# this shows where Apple has got to and, once it has accepted, staples the
+# answer to the .dmg so that it also opens on a Mac with no network.
+#
+# Started by hand only. It takes about a minute (macOS minutes are billed at
+# ten times the Linux rate in a private repository).
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Number of the "Build for macOS" run whose .dmg to finish (the digits at the end of its address)
+        required: true
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  staple:
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - name: Show how Apple is getting on with the latest submissions
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          xcrun notarytool history --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" > "$RUNNER_TEMP/history.txt" || echo "::warning::Could not ask Apple for the list of submissions."
+          head -40 "$RUNNER_TEMP/history.txt"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: BackupTool-macOS
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+          path: dmg
+
+      # Stapling needs no login: the ticket is looked up by the .dmg itself,
+      # and it is only there once Apple has accepted it.
+      - name: Staple Apple's answer and check that a Mac will open it
+        run: |
+          dmg="$(ls dmg/*.dmg)"
+          if ! xcrun stapler staple "$dmg"; then
+            echo "::error::Apple has no answer for this .dmg yet (see the list above: 'In Progress' means still waiting, 'Invalid' means refused). Nothing was changed; try again later."
+            exit 1
+          fi
+          xcrun stapler validate "$dmg"
+          spctl --assess --type open --context context:primary-signature --verbose=2 "$dmg"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BackupTool-macOS
+          path: dmg/*.dmg
+          if-no-files-found: error
