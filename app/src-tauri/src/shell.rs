@@ -353,6 +353,7 @@ pub fn pin_popover(state: State<PopoverState>, pinned: bool) {
 
 #[tauri::command]
 pub fn quit(app: AppHandle) {
+    crate::proxies::stop_for_exit(&app);
     app.exit(0);
 }
 
@@ -368,7 +369,10 @@ pub fn setup(app: &AppHandle) -> tauri::Result<()> {
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id().as_ref() {
             "open" => show_main(app),
-            "quit" => app.exit(0),
+            "quit" => {
+                crate::proxies::stop_for_exit(app);
+                app.exit(0);
+            }
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {

@@ -3,6 +3,7 @@ import { api, type DestState, type HashAlgo, type VerifyMode } from "./api";
 import { bytes, cameraName, files, leaf, remaining } from "./format";
 import { useSession, useShared } from "./session";
 import ShootDialog from "./ShootDialog";
+import ProxyDialog from "./ProxyDialog";
 import VerifyDialog from "./VerifyDialog";
 import {
   CameraIcon,
@@ -69,6 +70,13 @@ export default function App() {
     setWantReport,
     wantNotify,
     setWantNotify,
+    proxy,
+    setProxy,
+    proxyExcluded,
+    setProxyExcluded,
+    proxyAvailable,
+    proxyStatus,
+    stopProxies,
     mhlPossible,
     inspection,
     card,
@@ -96,6 +104,7 @@ export default function App() {
   const [choosingShoot, setChoosingShoot] = useState(false);
   // The backup being checked against its history, while that dialog is open.
   const [verifying, setVerifying] = useState<string | null>(null);
+  const [choosingProxies, setChoosingProxies] = useState(false);
 
   const chooseBackup = async () => {
     const picked = await api.pickFolder("Scegli il backup da verificare");
@@ -310,6 +319,51 @@ export default function App() {
         </section>
       )}
 
+      {proxyStatus && proxyStatus.total + proxyStatus.skipped > 0 && (
+        <section className="proxies" aria-label="Proxy">
+          {proxyStatus.active ? (
+            <>
+              <p className="progress-line">
+                <span>
+                  Proxy {Math.min(proxyStatus.done + 1, proxyStatus.total)} di {proxyStatus.total}
+                  {proxyStatus.current && `, ${proxyStatus.current}`}
+                </span>
+                <button className="link" onClick={stopProxies}>
+                  Ferma
+                </button>
+              </p>
+              <div className="bar" role="progressbar" aria-valuemin={0} aria-valuemax={100}>
+                <i
+                  style={{
+                    width: `${((proxyStatus.done + proxyStatus.fraction) / Math.max(proxyStatus.total, 1)) * 100}%`,
+                  }}
+                />
+              </div>
+            </>
+          ) : (
+            <p className="progress-line">
+              <span>
+                {proxyStatus.cancelled
+                  ? `Proxy fermati: ${proxyStatus.done} di ${proxyStatus.total} fatti.`
+                  : `Proxy pronti: ${proxyStatus.done} di ${proxyStatus.total}.`}
+              </span>
+            </p>
+          )}
+          {proxyStatus.skipped > 0 && (
+            <p className="progress-file">
+              {proxyStatus.skipped === 1
+                ? "1 clip raw non convertibile qui."
+                : `${proxyStatus.skipped} clip raw non convertibili qui.`}
+            </p>
+          )}
+          {proxyStatus.failed.map((failure) => (
+            <p className="warn" key={failure.clip}>
+              {failure.clip}: {failure.error}
+            </p>
+          ))}
+        </section>
+      )}
+
       <footer className="win-bar">
         {running ? (
           <div className="progress">
@@ -392,6 +446,27 @@ export default function App() {
               />
               Notifiche
             </label>
+            <label
+              className="switch"
+              title={
+                proxyAvailable
+                  ? "Versioni leggere dei clip, in una cartella Proxy accanto agli originali"
+                  : "Su questo computer manca FFmpeg, che serve per convertire i video"
+              }
+            >
+              <input
+                type="checkbox"
+                checked={proxy.enabled && proxyAvailable}
+                disabled={!proxyAvailable}
+                onChange={(e) => setProxy({ ...proxy, enabled: e.target.checked })}
+              />
+              Proxy
+            </label>
+            {proxy.enabled && proxyAvailable && (
+              <button className="link" onClick={() => setChoosingProxies(true)}>
+                Formato e clip…
+              </button>
+            )}
             {!mhlPossible && wantMhl && (
               <p className="option-note">
                 {algo === "sha256"
@@ -411,6 +486,18 @@ export default function App() {
           </button>
         )}
       </footer>
+
+      {choosingProxies && (
+        <ProxyDialog
+          source={source}
+          workingDrive={destinations.length > 0 ? leaf(destinations[0]) : null}
+          settings={proxy}
+          onSettings={setProxy}
+          excluded={proxyExcluded}
+          onExcluded={setProxyExcluded}
+          onClose={() => setChoosingProxies(false)}
+        />
+      )}
 
       {verifying && (
         <VerifyDialog folder={verifying} notify={wantNotify} onClose={() => setVerifying(null)} />

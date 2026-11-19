@@ -1,6 +1,7 @@
 mod checkup;
 mod eject;
 mod notify;
+mod proxies;
 mod shell;
 
 use std::collections::BTreeMap;
@@ -168,7 +169,7 @@ fn remember_camera(app: AppHandle, key: String, name: String) -> Result<(), Stri
 }
 
 /// What to leave next to the footage once a job is done.
-#[derive(Deserialize, Clone, Copy)]
+#[derive(Deserialize, Clone)]
 struct Extras {
     /// Record the verified files in an ASC MHL history.
     mhl: bool,
@@ -176,6 +177,9 @@ struct Extras {
     report: bool,
     /// Show a system notification when the job ends.
     notify: bool,
+    /// Make proxies of the clips once they are on the first destination.
+    #[serde(default)]
+    proxy: Option<proxies::ProxyRequest>,
 }
 
 /// What was written on one destination after the copy.
@@ -206,7 +210,7 @@ fn under(root: &Path, rel: &str) -> PathBuf {
 fn write_extras(
     spec: &JobSpec,
     layout: Option<&ShootLayout>,
-    extras: Extras,
+    extras: &Extras,
     files: &[FileEntry],
     job: &JobReport,
 ) -> Vec<DestExtras> {
@@ -223,6 +227,10 @@ fn write_extras(
     let mut ignore = vec![format!("/{REPORTS_DIR}")];
     if layout.is_some() {
         ignore.extend(EMPTY_FOLDERS.iter().map(|name| format!("/{name}")));
+    }
+    if extras.proxy.is_some() {
+        // Proxies are made from the footage, not part of it.
+        ignore.push(format!("{}/", backup_engine::proxy::PROXY_DIR));
     }
     let algo = spec.options.algo;
     let mhl = extras.mhl && spec.options.verify != VerifyMode::None && algo.in_mhl();
@@ -332,7 +340,17 @@ fn start_job(
                 let _ = app.emit("job-event", &event);
             })
             .map_err(|err| err.to_string())?;
-            let written = write_extras(&spec, layout.as_ref(), extras, &files, &report);
+            let written = write_extras(&spec, layout.as_ref(), &extras, &files, &report);
+            if let Some(request) = &extras.proxy {
+                // The copy is done and the card is safe: proxies carry on by
+                // themselves, read from the first destination.
+                let (clips, skipped) = proxies::clips_for(&spec, &files, &report, request);
+                let preset = backup_engine::proxy::ProxyPreset {
+                    codec: request.codec,
+                    size: request.size,
+                };
+                proxies::enqueue(&app, clips, skipped, preset, extras.notify);
+            }
             Ok(Finished { report, extras: written })
         });
         running.store(false, Ordering::SeqCst);
@@ -360,6 +378,7 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .manage(JobState::default())
         .manage(shell::PopoverState::default())
+        .manage(proxies::ProxyQueue::default())
         .setup(|app| Ok(shell::setup(app.handle())?))
         .invoke_handler(tauri::generate_handler![
             shell::list_volumes,
@@ -374,6 +393,10 @@ pub fn run() {
             eject::eject,
             checkup::find_backups,
             checkup::start_verify,
+            proxies::proxy_available,
+            proxies::proxy_status,
+            proxies::cancel_proxies,
+            proxies::list_videos,
             analyze_card,
             inspect,
             list_clients,

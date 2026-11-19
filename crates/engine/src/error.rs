@@ -21,6 +21,8 @@ pub enum Error {
     InvalidJob(String),
     #[error("MHL history: {0}")]
     Mhl(String),
+    #[error("proxy: {0}")]
+    Proxy(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

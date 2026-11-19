@@ -98,7 +98,33 @@ export type JobReport = {
 };
 
 /** What to leave next to the footage once a job is done. */
-export type Extras = { mhl: boolean; report: boolean; notify: boolean };
+export type ProxyCodec = "prores_proxy" | "prores_lt" | "h264" | "h265" | "dnxhr_lb";
+export type ProxySize = "hd" | "half" | "quarter" | "original";
+
+/** Proxies to make after the copy; `exclude` lists clips by their source path. */
+export type ProxyRequest = { codec: ProxyCodec; size: ProxySize; exclude: string[] };
+
+/** Where the background proxy queue has got to. */
+export type ProxyStatus = {
+  active: boolean;
+  total: number;
+  done: number;
+  current: string | null;
+  fraction: number;
+  failed: { clip: string; error: string }[];
+  /** Camera raw clips left out because they cannot be converted. */
+  skipped: number;
+  cancelled: boolean;
+};
+
+export type VideoFile = { rel_path: string; size: number; convertible: boolean };
+
+export type Extras = {
+  mhl: boolean;
+  report: boolean;
+  notify: boolean;
+  proxy: ProxyRequest | null;
+};
 
 export type Generation = {
   manifest: string;
@@ -204,6 +230,13 @@ export interface Api {
   onVerify(handlers: VerifyHandlers): () => void;
   /** Ejects a removable volume; rejects with the reason if it cannot. */
   eject(path: string): Promise<void>;
+  /** Whether this computer has what it takes to make proxies. */
+  proxyAvailable(): Promise<boolean>;
+  proxyStatus(): Promise<ProxyStatus>;
+  cancelProxies(): Promise<void>;
+  onProxyStatus(listener: (status: ProxyStatus) => void): () => void;
+  /** The clips on a source, for choosing which get a proxy. */
+  listVideos(source: string): Promise<VideoFile[]>;
 }
 
 /** Registers a Tauri event listener and returns a synchronous "stop". */
@@ -263,6 +296,11 @@ const tauri: Api = {
   openPopover: () => invoke("open_popover"),
   quit: () => invoke("quit"),
   eject: (path) => invoke("eject", { path }),
+  proxyAvailable: () => invoke("proxy_available"),
+  proxyStatus: () => invoke("proxy_status"),
+  cancelProxies: () => invoke("cancel_proxies"),
+  onProxyStatus: (listener) => on("proxy-status", listener),
+  listVideos: (source) => invoke("list_videos", { source }),
   findBackups: (folder) => invoke("find_backups", { folder }),
   startVerify: (roots, record, notify) => invoke("start_verify", { roots, record, notify }),
   onVerify: ({ onProgress, onFinished }) => {
@@ -277,6 +315,39 @@ const tauri: Api = {
  */
 function demo(): Api {
   let handlers: JobHandlers | null = null;
+  let proxyListener: ((status: ProxyStatus) => void) | null = null;
+  let proxyTimer: number | undefined;
+  let proxyNow: ProxyStatus = {
+    active: false,
+    total: 0,
+    done: 0,
+    current: null,
+    fraction: 0,
+    failed: [],
+    skipped: 0,
+    cancelled: false,
+  };
+  /** Pretends to encode a dozen clips once a copy has finished. */
+  const fakeProxies = (request: ProxyRequest) => {
+    const clips = 12 - request.exclude.length;
+    let step = 0;
+    proxyNow = { ...proxyNow, active: true, total: clips, done: 0, failed: [], skipped: 1, cancelled: false };
+    proxyTimer = window.setInterval(() => {
+      step += 1;
+      const done = Math.floor(step / 4);
+      proxyNow =
+        done >= clips
+          ? { ...proxyNow, active: false, done: clips, current: null, fraction: 0 }
+          : {
+              ...proxyNow,
+              done,
+              current: `DSC_${String(done + 1).padStart(4, "0")}.MOV`,
+              fraction: (step % 4) / 4,
+            };
+      proxyListener?.(proxyNow);
+      if (!proxyNow.active) window.clearInterval(proxyTimer);
+    }, 250);
+  };
   let verifying: VerifyHandlers | null = null;
   // Two browser tabs stand in for the two windows.
   const channel = new BroadcastChannel("shared");
@@ -295,7 +366,7 @@ function demo(): Api {
   const known = ["Kestrel Running"];
   let job: { destinations: string[]; extras: Extras } = {
     destinations: [],
-    extras: { mhl: false, report: false, notify: false },
+    extras: { mhl: false, report: false, notify: false, proxy: null },
   };
   const finish = (report: JobReport) =>
     handlers?.onFinished({
@@ -379,6 +450,27 @@ function demo(): Api {
     openMain: async () => {},
     openPopover: async () => {},
     quit: async () => {},
+    proxyAvailable: async () => true,
+    proxyStatus: async () => proxyNow,
+    cancelProxies: async () => {
+      window.clearInterval(proxyTimer);
+      proxyNow = { ...proxyNow, active: false, current: null, cancelled: true };
+      proxyListener?.(proxyNow);
+    },
+    onProxyStatus: (listener) => {
+      proxyListener = listener;
+      return () => {
+        proxyListener = null;
+      };
+    },
+    listVideos: async () => [
+      ...Array.from({ length: 12 }, (_, i) => ({
+        rel_path: `DCIM/100NCZ_6/DSC_${String(i + 1).padStart(4, "0")}.MOV`,
+        size: 1.3e9 + i * 4.1e7,
+        convertible: true,
+      })),
+      { rel_path: "DCIM/100NCZ_6/DSC_0013.NEV", size: 9.4e9, convertible: false },
+    ],
     findBackups: async (folder) => [
       {
         root: `${folder}\\08.11.26 Trail series`,
@@ -442,6 +534,7 @@ function demo(): Api {
       ),
     startJob: async (spec, _layout, extras) => {
       job = { destinations: spec.destinations, extras };
+      const wanted = extras.proxy;
       let work = 0;
       timer = window.setInterval(() => {
         work += 0.012;
@@ -465,6 +558,7 @@ function demo(): Api {
         if (work >= 1) {
           window.clearInterval(timer);
           backedUp = true;
+          if (wanted) fakeProxies(wanted);
           finish({
             files: [],
             total_files: total,

@@ -54,12 +54,38 @@ enum Command {
         #[arg(long)]
         record: bool,
     },
+    /// Make an editing proxy of a clip, in a Proxy folder beside it
+    Proxy {
+        clip: PathBuf,
+        #[arg(long, value_enum, default_value = "prores-proxy")]
+        codec: Codec,
+        #[arg(long, value_enum, default_value = "hd")]
+        size: Size,
+    },
     /// Checksum a single file, reading from the device rather than the cache
     Hash {
         file: PathBuf,
         #[arg(long, default_value = "xxh64")]
         algo: HashAlgo,
     },
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum Codec {
+    ProresProxy,
+    ProresLt,
+    H264,
+    H265,
+    DnxhrLb,
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum Size {
+    /// At most 1080 lines high
+    Hd,
+    Half,
+    Quarter,
+    Original,
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -179,6 +205,40 @@ fn run(cli: Cli) -> backup_engine::Result<ExitCode> {
             if !intact {
                 return Ok(ExitCode::FAILURE);
             }
+        }
+        Command::Proxy { clip, codec, size } => {
+            use backup_engine::proxy::{find_ffmpeg, make_proxy, proxy_path, ProxyCodec, ProxyPreset, ProxySize};
+            let Some(program) = find_ffmpeg() else {
+                println!("FFmpeg was not found on this machine");
+                return Ok(ExitCode::FAILURE);
+            };
+            let preset = ProxyPreset {
+                codec: match codec {
+                    Codec::ProresProxy => ProxyCodec::ProresProxy,
+                    Codec::ProresLt => ProxyCodec::ProresLt,
+                    Codec::H264 => ProxyCodec::H264,
+                    Codec::H265 => ProxyCodec::H265,
+                    Codec::DnxhrLb => ProxyCodec::DnxhrLb,
+                },
+                size: match size {
+                    Size::Hd => ProxySize::Hd,
+                    Size::Half => ProxySize::Half,
+                    Size::Quarter => ProxySize::Quarter,
+                    Size::Original => ProxySize::Original,
+                },
+            };
+            let started = Instant::now();
+            let outcome = make_proxy(&program, &clip, preset, &cancel, &|fraction| {
+                eprint!("\rEncoding {:>3.0}%   ", fraction * 100.0);
+                let _ = std::io::stderr().flush();
+            })?;
+            eprintln!();
+            println!(
+                "{:?} in {:.1}s: {}",
+                outcome,
+                started.elapsed().as_secs_f64(),
+                proxy_path(&clip, preset).display()
+            );
         }
         Command::Hash { file, algo } => {
             let started = Instant::now();

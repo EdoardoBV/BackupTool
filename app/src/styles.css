@@ -627,6 +627,29 @@ li + li > .item-pick {
   color: var(--muted);
 }
 
+.proxies {
+  margin: 0 24px 14px;
+  padding: 10px 16px 12px;
+  background: var(--inset);
+  border: 1px solid var(--hair);
+  border-radius: var(--radius-small);
+}
+
+.proxies .progress-line {
+  justify-content: space-between;
+  font-size: 12.5px;
+}
+
+.proxies .progress-line:last-child,
+.proxies .progress-line + .progress-file {
+  margin-bottom: 0;
+}
+
+.proxies .warn {
+  display: block;
+  margin-top: 4px;
+}
+
 .win-bar {
   display: flex;
   align-items: center;
@@ -1002,6 +1025,47 @@ li + li > .item-pick {
 
 .field .switch {
   margin-top: 8px;
+}
+
+.clip-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 10px 0 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.clips {
+  min-height: 0;
+  max-height: 230px;
+  overflow: auto;
+}
+
+.clip {
+  display: flex;
+  flex: 1;
+  gap: 9px;
+  align-items: center;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.clip input {
+  accent-color: var(--blue);
+}
+
+.clip-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.clip-off {
+  color: var(--muted);
+  cursor: default;
 }
 
 .dialog-head {

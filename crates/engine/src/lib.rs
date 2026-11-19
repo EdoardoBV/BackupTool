@@ -11,6 +11,7 @@ pub mod hash;
 mod io;
 pub mod job;
 pub mod mhl;
+pub mod proxy;
 pub mod report;
 pub mod scan;
 pub mod shoot;

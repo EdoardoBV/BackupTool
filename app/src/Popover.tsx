@@ -34,6 +34,7 @@ export default function Popover() {
     ejecting,
     ejectError,
     eject,
+    proxyStatus,
   } = useSession();
   const panel = useRef<HTMLDivElement>(null);
 
@@ -209,6 +210,15 @@ export default function Popover() {
                 </li>
               );
             })}
+            {proxyStatus?.active && (
+              <li className="drive">
+                <FolderIcon />
+                <span className="drive-name">
+                  Proxy {Math.min(proxyStatus.done + 1, proxyStatus.total)} di {proxyStatus.total}
+                </span>
+                <span className="chip tone-yellow">in corso</span>
+              </li>
+            )}
             {shoot && (
               <li className="drive">
                 <FolderIcon />

@@ -7,6 +7,9 @@ import {
   type HashAlgo,
   type Inspection,
   type JobReport,
+  type ProxyCodec,
+  type ProxySize,
+  type ProxyStatus,
   type ShootLayout,
   type VerifyMode,
   type Volume,
@@ -28,6 +31,9 @@ export type Progress = {
   workDone: number;
   workTotal: number;
 };
+
+/** Whether to make proxies after a copy, and in what format. */
+export type ProxySettings = { enabled: boolean; codec: ProxyCodec; size: ProxySize };
 
 /** An active shoot: its layout and its folder relative to each destination. */
 export type Shoot = { layout: ShootLayout; dir: string };
@@ -208,6 +214,26 @@ export function useSession() {
   const [wantMhl, setWantMhl] = useShared("mhl", true, true);
   const [wantReport, setWantReport] = useShared("report", true, true);
   const [wantNotify, setWantNotify] = useShared("notify", true, true);
+  const [proxy, setProxy] = useShared<ProxySettings>(
+    "proxy",
+    { enabled: false, codec: "prores_proxy", size: "hd" },
+    true,
+  );
+  // Clips of the current card left out of the proxies, by source path.
+  const [proxyExcluded, setProxyExcluded] = useShared<string[]>("proxyExcluded", [], false);
+  const [proxyAvailable, setProxyAvailable] = useState(false);
+  const [proxyStatus, setProxyStatus] = useState<ProxyStatus | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    api.proxyAvailable().then((yes) => alive && setProxyAvailable(yes), () => {});
+    api.proxyStatus().then((status) => alive && setProxyStatus(status), () => {});
+    const stop = api.onProxyStatus(setProxyStatus);
+    return () => {
+      alive = false;
+      stop();
+    };
+  }, []);
 
   const [inspection, setInspection] = useState<Inspection | null>(null);
   const [inspectError, setInspectError] = useState<string | null>(null);
@@ -250,12 +276,14 @@ export function useSession() {
       // The folders depend on what the card holds: confirm them per card.
       setShoot(null);
       setEjected(null);
+      // Which clips to leave out is a choice about one card.
+      setProxyExcluded([]);
       setSource(path);
       if (latest.current.destinations.includes(path)) {
         setDestinations(latest.current.destinations.filter((dest) => dest !== path));
       }
     },
-    [setShoot, setEjected, setSource, setDestinations],
+    [setShoot, setEjected, setProxyExcluded, setSource, setDestinations],
   );
 
   // Drives come and go. A card that is already in when the app starts is
@@ -413,6 +441,10 @@ export function useSession() {
         mhl: wantMhl && mhlPossible,
         report: wantReport,
         notify: wantNotify,
+        proxy:
+          proxy.enabled && proxyAvailable
+            ? { codec: proxy.codec, size: proxy.size, exclude: proxyExcluded }
+            : null,
       });
     } catch (err) {
       end();
@@ -487,6 +519,13 @@ export function useSession() {
     setWantReport,
     wantNotify,
     setWantNotify,
+    proxy,
+    setProxy,
+    proxyExcluded,
+    setProxyExcluded,
+    proxyAvailable,
+    proxyStatus,
+    stopProxies: () => api.cancelProxies(),
     mhlPossible,
     inspection,
     card,
