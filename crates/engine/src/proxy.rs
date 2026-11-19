@@ -329,8 +329,19 @@ mod tests {
     }
 
     /// A two-second 4:2:2 10-bit clip with sound and a timecode, as a stand-in
-    /// for camera footage. `None` when this machine has no FFmpeg.
+    /// for camera footage. `None` when this machine has no FFmpeg, unless
+    /// `REQUIRE_FFMPEG` is set: where the FFmpeg that ships with the app has
+    /// just been fetched, a test that quietly skips would prove nothing.
     fn test_clip(dir: &Path) -> Option<(PathBuf, PathBuf)> {
+        let made = make_test_clip(dir);
+        assert!(
+            made.is_some() || std::env::var_os("REQUIRE_FFMPEG").is_none(),
+            "REQUIRE_FFMPEG is set, but no working FFmpeg was found"
+        );
+        made
+    }
+
+    fn make_test_clip(dir: &Path) -> Option<(PathBuf, PathBuf)> {
         let program = find_ffmpeg()?;
         let clip = dir.join("A001C001.MOV");
         let made = ffmpeg(&program)

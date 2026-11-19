@@ -29,10 +29,20 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      # The FFmpeg that makes the proxies ships inside the app and is not kept
+      # in git. It has to be there before anything compiles the app.
+      - name: Fetch FFmpeg
+        run: bash scripts/fetch-ffmpeg.sh
+
       # The engine has macOS-only code (reads that skip the page cache) that
       # no other machine compiles or runs: prove it here before packaging.
+      # The fetched FFmpeg is put in reach so the proxy tests really encode
+      # with it; REQUIRE_FFMPEG turns a skipped proxy test into a failure.
       - name: Test the engine on macOS
-        run: cargo test -p backup-engine
+        run: |
+          mkdir -p "$RUNNER_TEMP/ffmpeg"
+          cp app/src-tauri/binaries/ffmpeg-universal-apple-darwin "$RUNNER_TEMP/ffmpeg/ffmpeg"
+          PATH="$RUNNER_TEMP/ffmpeg:$PATH" REQUIRE_FFMPEG=1 cargo test -p backup-engine
 
       - name: Install interface dependencies
         working-directory: app
@@ -48,3 +58,16 @@ jobs:
           name: BackupTool-macOS
           path: target/universal-apple-darwin/release/bundle/dmg/*.dmg
           if-no-files-found: error
+
+      # After the upload, so a complaint here still leaves a .dmg to look at.
+      - name: Check the FFmpeg inside the app
+        run: |
+          app="$(ls -d target/universal-apple-darwin/release/bundle/macos/*.app)"
+          ffmpeg="$app/Contents/MacOS/ffmpeg"
+          echo "Architectures: $(lipo -archs "$ffmpeg")"
+          lipo -archs "$ffmpeg" | grep -q arm64
+          lipo -archs "$ffmpeg" | grep -q x86_64
+          codesign --verify --deep --strict --verbose=2 "$app"
+          "$ffmpeg" -version | head -1
+          # The Intel half only runs here if the machine has Rosetta.
+          arch -x86_64 "$ffmpeg" -version | head -1 || echo "::warning::The Intel FFmpeg was not run (no Rosetta here?)"
