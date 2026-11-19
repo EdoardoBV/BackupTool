@@ -2,7 +2,8 @@ name: Build for macOS
 
 # Started by hand only (Actions tab, or `gh workflow run build-macos.yml`),
 # never by a push or a tag: in a private repository macOS minutes are billed
-# at ten times the Linux rate, and a build takes about six.
+# at ten times the Linux rate, and a build takes about eight, plus a few for
+# Apple's notarization when the app is signed.
 on:
   workflow_dispatch:
 
@@ -14,7 +15,69 @@ jobs:
   macos:
     runs-on: macos-latest
     timeout-minutes: 45
+    env:
+      # The app is signed with the Developer ID and notarized by Apple once
+      # the repository holds these five secrets (Settings > Secrets and
+      # variables > Actions):
+      #   APPLE_CERTIFICATE           the "Developer ID Application" certificate,
+      #                               exported as .p12 and base64-encoded
+      #   APPLE_CERTIFICATE_PASSWORD  the password chosen when exporting it
+      #   APPLE_ID                    the Apple account's e-mail
+      #   APPLE_PASSWORD              an app-specific password for that account
+      #   APPLE_TEAM_ID               the developer team's ten-character ID
+      # With none of them the app is signed ad hoc, as it always was: it runs,
+      # but a Mac that downloaded it wants "Open Anyway" in System Settings.
+      SIGNED: ${{ secrets.APPLE_CERTIFICATE != '' && secrets.APPLE_CERTIFICATE_PASSWORD != '' && secrets.APPLE_ID != '' && secrets.APPLE_PASSWORD != '' && secrets.APPLE_TEAM_ID != '' }}
+      SOME_SECRETS: ${{ secrets.APPLE_CERTIFICATE != '' || secrets.APPLE_CERTIFICATE_PASSWORD != '' || secrets.APPLE_ID != '' || secrets.APPLE_PASSWORD != '' || secrets.APPLE_TEAM_ID != '' }}
     steps:
+      - name: Say how the app will be signed
+        run: |
+          if [ "$SIGNED" = "true" ]; then
+            echo "::notice::Signing with the Developer ID and notarizing."
+          elif [ "$SOME_SECRETS" = "true" ]; then
+            echo "::error::Only some of the five signing secrets are set (APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD, APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID). Set them all, or none."
+            exit 1
+          else
+            echo "::notice::No signing secrets: the app is signed ad hoc and not notarized."
+          fi
+
+      # A wrong certificate or password would otherwise only show once the
+      # whole app has compiled. Here a mistake costs seconds.
+      - name: Check the signing secrets
+        if: env.SIGNED == 'true'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          certificate="$RUNNER_TEMP/certificate.p12"
+          keychain="$RUNNER_TEMP/check.keychain-db"
+          trap 'rm -f "$certificate"; security delete-keychain "$keychain" 2>/dev/null || true' EXIT
+
+          if ! printf '%s' "$APPLE_CERTIFICATE" | base64 --decode > "$certificate"; then
+            echo "::error::APPLE_CERTIFICATE is not valid base64: paste the output of 'base64 -i certificate.p12'."
+            exit 1
+          fi
+          security create-keychain -p check "$keychain"
+          security unlock-keychain -p check "$keychain"
+          if ! security import "$certificate" -k "$keychain" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign; then
+            echo "::error::The certificate could not be opened: APPLE_CERTIFICATE is not a .p12 with its private key, or APPLE_CERTIFICATE_PASSWORD is not its password."
+            exit 1
+          fi
+          found="$(security find-identity -p codesigning "$keychain" || true)"
+          echo "$found"
+          if ! echo "$found" | grep -q "Developer ID Application"; then
+            echo "::warning::No 'Developer ID Application' identity was seen in the certificate. Any other kind (Apple Development, Apple Distribution, Mac Installer) cannot sign an app for use outside the App Store."
+          fi
+
+          if ! xcrun notarytool history --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" > /dev/null; then
+            echo "::error::Apple refused the notarization login: check APPLE_ID, APPLE_PASSWORD (an app-specific password, not the account's own) and APPLE_TEAM_ID."
+            exit 1
+          fi
+          echo "Apple accepts the notarization login."
+
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
@@ -48,8 +111,25 @@ jobs:
         working-directory: app
         run: npm ci
 
-      # One app for both Apple Silicon and Intel Macs.
-      - name: Build the app
+      # One app for both Apple Silicon and Intel Macs. Tauri imports the
+      # certificate into a keychain of its own, signs the app and the FFmpeg
+      # inside it, sends the app to Apple and staples the answer to it.
+      # APPLE_SIGNING_IDENTITY overrides the ad-hoc "-" of tauri.conf.json and
+      # only has to be part of the certificate's name.
+      - name: Build the app, signed and notarized
+        if: env.SIGNED == 'true'
+        working-directory: app
+        env:
+          APPLE_SIGNING_IDENTITY: Developer ID Application
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: npm run tauri build -- --target universal-apple-darwin
+
+      - name: Build the app, signed ad hoc
+        if: env.SIGNED != 'true'
         working-directory: app
         run: npm run tauri build -- --target universal-apple-darwin
 
@@ -71,3 +151,14 @@ jobs:
           "$ffmpeg" -version | head -1
           # The Intel half only runs here if the machine has Rosetta.
           arch -x86_64 "$ffmpeg" -version | head -1 || echo "::warning::The Intel FFmpeg was not run (no Rosetta here?)"
+
+      # What a Mac that downloaded the app will decide: Gatekeeper has to
+      # accept it as a notarized Developer ID app, with the ticket stapled so
+      # it also opens with no network.
+      - name: Check that a Mac will open it
+        if: env.SIGNED == 'true'
+        run: |
+          app="$(ls -d target/universal-apple-darwin/release/bundle/macos/*.app)"
+          codesign --display --verbose=2 "$app" 2>&1 | grep -E "^(Authority|TeamIdentifier|Timestamp)"
+          xcrun stapler validate "$app"
+          spctl --assess --type execute --verbose=2 "$app"
