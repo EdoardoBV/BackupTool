@@ -108,19 +108,37 @@ fn is_structured(rel_path: &str) -> bool {
     MARKERS.iter().any(|marker| path.contains(marker))
 }
 
-/// Whether the top level of a volume holds the folders a camera or recorder
-/// writes. Tells a card apart from an ordinary external drive.
+/// Upper-cased names of what a folder holds; empty if it cannot be read.
+fn names_in(folder: &Path) -> Vec<String> {
+    std::fs::read_dir(folder)
+        .map(|entries| {
+            entries
+                .flatten()
+                .map(|entry| entry.file_name().to_string_lossy().to_ascii_uppercase())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Whether the top level of a volume holds what a camera or recorder writes.
+/// Tells a card apart from an ordinary drive, the system disk included.
 pub fn looks_like_card(root: &Path) -> bool {
-    const FOLDERS: &[&str] = &[
-        "DCIM", "PRIVATE", "AVCHD", "XDROOT", "CONTENTS", "CLIP", "BPAV", "MP_ROOT", "M4ROOT",
+    /// Names only a camera puts at the top of a volume. `MEDIAPRO.XML` is the
+    /// index of a Sony XDCAM card.
+    const OWN: &[&str] = &["DCIM", "AVCHD", "XDROOT", "BPAV", "MP_ROOT", "M4ROOT", "MEDIAPRO.XML"];
+    /// Everyday names that count only with the camera's own folder inside:
+    /// macOS keeps a `private` folder at the top of its system disk.
+    const WITH_INSIDE: &[(&str, &[&str])] = &[
+        ("PRIVATE", &["M4ROOT", "AVCHD", "SONY", "PANA_GRP", "XDROOT"]),
+        ("CONTENTS", &["CLIPS001", "VIDEO", "CLIP"]),
     ];
-    let Ok(entries) = std::fs::read_dir(root) else {
-        return false;
-    };
-    entries.flatten().any(|entry| {
-        let name = entry.file_name().to_string_lossy().to_ascii_uppercase();
+    names_in(root).iter().any(|name| {
         // RED magazines carry a `.RDM` folder at the top.
-        FOLDERS.contains(&name.as_str()) || name.ends_with(".RDM")
+        OWN.contains(&name.as_str())
+            || name.ends_with(".RDM")
+            || WITH_INSIDE.iter().any(|(outer, inner)| {
+                name == outer && names_in(&root.join(name)).iter().any(|n| inner.contains(&n.as_str()))
+            })
     })
 }
 
@@ -359,6 +377,37 @@ mod tests {
         assert!(looks_like_card(red.path()));
         assert!(!looks_like_card(drive.path()));
         assert!(!looks_like_card(&drive.path().join("not there")));
+    }
+
+    #[test]
+    fn a_system_disk_with_a_private_folder_is_not_a_card() {
+        // The top of a macOS system volume.
+        let mac = tempfile::TempDir::new().unwrap();
+        for dir in ["private/var", "private/etc", "usr/sbin", "Applications", "System", "Users"] {
+            std::fs::create_dir_all(mac.path().join(dir)).unwrap();
+        }
+        // Folders with the same everyday names on an ordinary drive.
+        let drive = tempfile::TempDir::new().unwrap();
+        for dir in ["Private/Documenti", "Contents/Capitolo 1", "Clip"] {
+            std::fs::create_dir_all(drive.path().join(dir)).unwrap();
+        }
+
+        assert!(!looks_like_card(mac.path()));
+        assert!(!looks_like_card(drive.path()));
+    }
+
+    #[test]
+    fn camera_folders_under_an_everyday_name_still_make_a_card() {
+        let folders = ["PRIVATE/M4ROOT/CLIP", "private/AVCHD/BDMV", "PRIVATE/PANA_GRP", "CONTENTS/CLIPS001"];
+        for inside in folders {
+            let card = tempfile::TempDir::new().unwrap();
+            std::fs::create_dir_all(card.path().join(inside)).unwrap();
+            assert!(looks_like_card(card.path()), "{inside}");
+        }
+        let xdcam = tempfile::TempDir::new().unwrap();
+        std::fs::create_dir_all(xdcam.path().join("Clip")).unwrap();
+        std::fs::write(xdcam.path().join("MEDIAPRO.XML"), b"<MediaProfile/>").unwrap();
+        assert!(looks_like_card(xdcam.path()));
     }
 
     #[test]

@@ -51,6 +51,17 @@ pub struct Volume {
     pub(crate) available: u64,
 }
 
+/// The disk the operating system runs from. Never offered as a card,
+/// whatever folders it has: reading all of it is neither wanted nor allowed.
+fn is_system_volume(mount: &std::path::Path) -> bool {
+    if cfg!(windows) {
+        let system = std::env::var("SystemDrive").unwrap_or_else(|_| "C:".into());
+        mount.to_string_lossy().trim_end_matches('\\').eq_ignore_ascii_case(&system)
+    } else {
+        mount == std::path::Path::new("/") || mount.starts_with("/System")
+    }
+}
+
 pub(crate) fn volumes() -> Vec<Volume> {
     // The disk list leaves out everything that is not attached to this machine.
     let mut found: Vec<Volume> = sysinfo::Disks::new_with_refreshed_list()
@@ -60,7 +71,7 @@ pub(crate) fn volumes() -> Vec<Volume> {
             name: disk.name().to_string_lossy().into_owned(),
             file_system: disk.file_system().to_string_lossy().into_owned(),
             removable: disk.is_removable(),
-            card: looks_like_card(disk.mount_point()),
+            card: !is_system_volume(disk.mount_point()) && looks_like_card(disk.mount_point()),
             network: false,
             total: disk.total_space(),
             available: disk.available_space(),
@@ -424,6 +435,20 @@ mod tests {
             assert!(!share.path.eq_ignore_ascii_case(&format!("{system}\\")));
         }
         assert!(volumes().iter().any(|volume| !volume.network));
+    }
+
+    #[test]
+    fn the_system_disk_is_never_a_card() {
+        if cfg!(windows) {
+            let system = std::env::var("SystemDrive").unwrap_or_else(|_| "C:".into());
+            assert!(is_system_volume(std::path::Path::new(&format!("{system}\\"))));
+            assert!(!is_system_volume(std::path::Path::new("E:\\")));
+        } else {
+            assert!(is_system_volume(std::path::Path::new("/")));
+            assert!(is_system_volume(std::path::Path::new("/System/Volumes/Data")));
+            assert!(!is_system_volume(std::path::Path::new("/Volumes/NIKON Z6_3")));
+        }
+        assert!(volumes().iter().all(|volume| !(volume.card && is_system_volume(std::path::Path::new(&volume.path)))));
     }
 
     #[test]
